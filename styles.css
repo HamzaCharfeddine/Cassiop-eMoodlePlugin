@@ -1,0 +1,102 @@
+/* Styles for audio widgets. */
+.que.recordrtc .qtype_recordrtc-audio-widget {
+    width: 26em;
+}
+
+/* Styles for video widgets. */
+.que.recordrtc .qtype_recordrtc-ratio-16x9 .qtype_recordrtc-no-recording-placeholder {
+    padding: calc(28.125% - 10.5px) 0;
+}
+.que.recordrtc .qtype_recordrtc-ratio-4x3 .qtype_recordrtc-no-recording-placeholder {
+    padding: calc(37.5% - 10.5px) 0;
+}
+
+/* Other styles used while the question is being attempted. */
+.que.recordrtc .qtype_recordrtc-no-recording-placeholder,
+.que.recordrtc .qtype_recordrtc-time-left {
+    color: #676463;
+}
+.que.recordrtc .qtype_recordrtc-no-recording-placeholder,
+.que.recordrtc .qtype_recordrtc-time-left {
+    background-color: #f0f0f1;
+}
+.que.recordrtc .qtype_recordrtc-download-icon img {
+    height: 28px;
+    width: 28px;
+}
+.que.recordrtc .specificfeedback {
+    margin: 0 0 0.5em;
+    padding: 0.5em 0.5em 0;
+    background: #fff3bf;
+    border: 1px solid #fff3bf;
+}
+
+/* Styles used on the editing form. */
+body#page-question-type-recordrtc.path-question-type .form-group[data-groupname=timelimitinseconds] .sr-only {
+    display: none;
+}
+
+.que.recordrtc .qtype_recordrtc-progressbar {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border: 1px solid #000;
+}
+
+.que.recordrtc .qtype_recordrtc-progressbar.qtype_recordrtc-timer-back {
+    background: #0b55a8;
+    color: #fff;
+}
+
+.que.recordrtc .qtype_recordrtc-progressbar.qtype_recordrtc-timer-front {
+    background: #f0f0f1;
+    color: #000;
+    z-index: 1;
+}
+
+.que.recordrtc .qtype_recordrtc-progressbar.animate {
+    animation: qtype_recordrtc-progressbar 0s linear 0s forwards;
+}
+
+/*
+    Explaining the animation:
+    The HTML DOM will contain two elements:
+    • Element 1: has a blue background (#0b55a8) and white text color.
+    • Element 2: has a white background and black text color.
+    Element 2 will be above element 1. The animation does only one thing:
+    • Create an inset rectangle into element 2 and then clip it to show element 2.
+*/
+@keyframes qtype_recordrtc-progressbar {
+    0% {
+        clip-path: inset(0 0 0 0%);
+    }
+    100% {
+        clip-path: inset(0 0 0 100%);
+    }
+}
+/* Styles for the Show Question button and reflection timer */
+.qtype_recordrtc-reflection-timer {
+    font-weight: bold;
+    color: #ff0000;
+    margin-bottom: 10px;
+}
+
+.qtype_recordrtc-main-button {
+    /* Add any specific styles for the recorder buttons if needed */
+}
+
+.qtype_recordrtc-main-button.hide {
+    display: none;
+}
+
+/* Ensure the reflection timer is prominently displayed */
+.reflection-timer {
+    margin-top: 10px;
+    font-size: 1.2em;
+}
+
+/* Ensure consistent visibility toggling */
+.hide {
+    display: none;
+}
