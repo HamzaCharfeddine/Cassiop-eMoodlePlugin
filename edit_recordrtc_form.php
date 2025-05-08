@@ -14,289 +14,157 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * Defines the form for editing recordrtc questions.
+ *
+ * @package   qtype_recordrtc
+ * @copyright 2022 The Open University
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 defined('MOODLE_INTERNAL') || die();
 
-use qtype_recordrtc\widget_info;
-
+require_once($CFG->dirroot . '/question/type/questiontypebase.php');
+require_once($CFG->dirroot . '/question/engine/bank.php');
 require_once($CFG->dirroot . '/question/type/edit_question_form.php');
 
 /**
- * The editing form for record audio and video questions.
+ * RecordRTC question type editing form definition.
  *
- * @package   qtype_recordrtc
- * @copyright 2019 The Open University
+ * @copyright 2022 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_recordrtc_edit_form extends question_edit_form {
 
-    /**
-     * Get the current value for the question text that will be displayed in the form.
-     *
-     * @return string question text HTML.
-     */
-    protected function get_current_question_text(): string {
-        $submitteddata = optional_param_array('questiontext', '', PARAM_RAW);
-        if ($submitteddata) {
-            // Form has been submitted, but it being re-displayed.
-            return $submitteddata['text'];
-        }
-        if (isset($this->question->id)) {
-            // Form is being loaded to edit an existing question.
-            return $this->question->questiontext;
-        }
-        // Creating new question.
-        return '';
-    }
-
-    /**
-     * Get the current value for the mediatype field.
-     *
-     * @return string one of the qtype_recordrtc::MEDIA_TYPE_... constants.
-     */
-    protected function get_current_mediatype(): string {
-        $mediatype = $this->optional_param('mediatype', '', PARAM_ALPHA);
-        if ($mediatype) {
-            // Form has been submitted, but it being re-displayed.
-            return $mediatype;
-        }
-        if (isset($this->question->id)) {
-            // Form is being loaded to edit an existing question.
-            return $this->question->options->mediatype;
-        }
-        // Creating new question.
-        // The next line needs to match the default below.
-        return $this->get_default_value('mediatype', qtype_recordrtc::MEDIA_TYPE_AUDIO);
-    }
-
     protected function definition_inner($mform) {
-        global $CFG;
-        $currentmediatype = $this->get_current_mediatype();
+        $this->add_per_answer_fields($mform, get_string('feedbackforwidget', 'qtype_recordrtc', '{no}'),
+                question_bank::fraction_options(), 1, 1);
 
-        // Field for mediatype.
-        $mediaoptions = [
-            qtype_recordrtc::MEDIA_TYPE_AUDIO => get_string('audio', 'qtype_recordrtc'),
-            qtype_recordrtc::MEDIA_TYPE_VIDEO => get_string('video', 'qtype_recordrtc'),
-            qtype_recordrtc::MEDIA_TYPE_SCREEN => get_string('screen', 'qtype_recordrtc'),
-            qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV => get_string('customav', 'qtype_recordrtc')
-        ];
-        $mediatype = $mform->createElement('select', 'mediatype', get_string('mediatype', 'qtype_recordrtc'), $mediaoptions);
-        $mform->insertElementBefore($mediatype, 'questiontext');
-        $mform->addHelpButton('mediatype', 'mediatype', 'qtype_recordrtc');
-        $mform->setDefault('mediatype', $this->get_default_value('mediatype', qtype_recordrtc::MEDIA_TYPE_AUDIO));
+        $mform->addElement('select', 'mediatype',
+                get_string('mediatype', 'qtype_recordrtc'),
+                [
+                    'audio' => get_string('audio', 'qtype_recordrtc'),
+                    'video' => get_string('video', 'qtype_recordrtc'),
+                    'screen' => get_string('screen', 'qtype_recordrtc'),
+                    'customav' => get_string('customav', 'qtype_recordrtc'),
+                ]);
 
-        // Add instructions and widget placeholder templates for question authors to copy and paste into the question text.
-        $placeholders = [
-            widget_info::make_placeholder('recorder1', 'audio', 120),
-            widget_info::make_placeholder('recorder2', 'video', 90),
-            widget_info::make_placeholder('recorder3', 'screen', 90),
-        ];
-        $placeholders = array_map(
-            function($placehodler) {
-                return html_writer::empty_tag('input', ['type' => 'text', 'readonly' => 'readonly', 'size' => '24',
-                        'value' => $placehodler, 'onfocus' => 'this.select()',
-                        'class' => 'form-control-plaintext d-inline-block w-auto mr-3']);
-            }, $placeholders);
-        $avplaceholder = $mform->createElement('static', 'avplaceholder', '', implode("\n", $placeholders));
-        $avplaceholdergroup = $mform->createElement('group', 'avplaceholdergroup',
-                get_string('avplaceholder', 'qtype_recordrtc'), [$avplaceholder]);
-        $mform->hideIf('avplaceholdergroup', 'mediatype', 'noteq', qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV);
-        $mform->insertElementBefore($avplaceholdergroup, 'defaultmark');
-        $mform->addHelpButton('avplaceholdergroup', 'avplaceholder', 'qtype_recordrtc');
+        $this->add_timelimit_field($mform);
+        $this->add_allowpausing_field($mform);
+        $this->add_selfassessment_fields($mform);
+        $this->add_reflection_fields($mform);
+    }
 
-        // Add the update-form button.
-        // This is sort-of a no-submit button, but acutally, when it is clicked,
-        // we want to validate the question text. So, we make it a normal submit
-        // button, and then in the validation, we ensure that at least one 'error' is
-        // displayed.
-        $verify = $mform->createElement('submit', 'updateform', get_string('updateform', 'qtype_recordrtc'));
-        if ($currentmediatype !== qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV) {
-            // If the question is currently using custom A/V, then the refresh form button must always be visible,
-            // so you can refresh the form if you change the media type.
-            $mform->hideIf('updateform', 'mediatype', 'noteq', qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV);
-        }
-        $mform->insertElementBefore($verify, 'defaultmark');
-
-        // Field for timelimitinseconds.
-        $mform->addElement('duration', 'timelimitinseconds', get_string('timelimit', 'qtype_recordrtc'),
-                ['units' => [60, 1], 'optional' => false]);
+    /**
+     * Add a field to set the time limit for recordings.
+     *
+     * @param MoodleQuickForm $mform the form being built.
+     */
+    protected function add_timelimit_field($mform) {
+        $mform->addElement('text', 'timelimitinseconds',
+                get_string('timelimit', 'qtype_recordrtc'),
+                ['size' => 5]);
+        $mform->setType('timelimitinseconds', PARAM_INT);
+        $mform->addRule('timelimitinseconds', null, 'required', null, 'client');
+        $mform->addRule('timelimitinseconds', get_string('errorintimelimit', 'qtype_recordrtc'), 'numeric', null, 'client');
+        $mform->setDefault('timelimitinseconds', 30);
         $mform->addHelpButton('timelimitinseconds', 'timelimit', 'qtype_recordrtc');
-        $mform->setDefault('timelimitinseconds',
-                $this->get_default_value('timelimitinseconds', qtype_recordrtc::DEFAULT_TIMELIMIT));
+    }
 
-        $mform->addElement('selectyesno', 'allowpausing', get_string('allowpausing', 'qtype_recordrtc'), '');
+    /**
+     * Add a field to control whether pausing is allowed.
+     *
+     * @param MoodleQuickForm $mform the form being built.
+     */
+    protected function add_allowpausing_field($mform) {
+        $mform->addElement('advcheckbox', 'allowpausing',
+                get_string('allowpausing', 'qtype_recordrtc'), null, null, [0, 1]);
+        $mform->setDefault('allowpausing', 0);
         $mform->addHelpButton('allowpausing', 'allowpausing', 'qtype_recordrtc');
-        $mform->setDefault('allowpausing', $this->get_default_value('allowpausing', 0));
+    }
 
-        ////////////added////////////
-        $mform->addElement('advcheckbox', 'enablereflection', get_string('enablereflection', 'qtype_recordrtc'));
+    /**
+     * Add fields to control self-assessment capabilities.
+     *
+     * @param MoodleQuickForm $mform the form being built.
+     */
+    protected function add_selfassessment_fields($mform) {
+        $mform->addElement('advcheckbox', 'canselfrate',
+                get_string('canselfrate', 'qtype_recordrtc'), null, null, [0, 1]);
+        $mform->setDefault('canselfrate', 0);
+        $mform->addHelpButton('canselfrate', 'canselfrate', 'qtype_recordrtc');
+
+        $mform->addElement('advcheckbox', 'canselfcomment',
+                get_string('canselfcomment', 'qtype_recordrtc'), null, null, [0, 1]);
+        $mform->setDefault('canselfcomment', 0);
+        $mform->addHelpButton('canselfcomment', 'canselfcomment', 'qtype_recordrtc');
+    }
+
+    /**
+     * Add fields to control reflection and preview capabilities.
+     *
+     * @param MoodleQuickForm $mform the form being built.
+     */
+    protected function add_reflection_fields($mform) {
+        $mform->addElement('advcheckbox', 'enablereflection',
+                get_string('enablereflection', 'qtype_recordrtc'), null, null, [0, 1]);
+        $mform->setDefault('enablereflection', 0);
         $mform->addHelpButton('enablereflection', 'enablereflection', 'qtype_recordrtc');
-        $mform->setDefault('enablereflection', $this->get_default_value('enablereflection', 0));
 
-        $mform->addElement('text', 'reflectiontime', get_string('reflectiontime', 'qtype_recordrtc'), ['size' => '10']);
+        $mform->addElement('text', 'reflectiontime',
+                get_string('reflectionandpreviewtime', 'qtype_recordrtc'),
+                ['size' => 5]);
         $mform->setType('reflectiontime', PARAM_INT);
-        $mform->addHelpButton('reflectiontime', 'reflectiontime', 'qtype_recordrtc');
-        $mform->setDefault('reflectiontime', $this->get_default_value('reflectiontime', 10));
-
-        $mform->addRule('reflectiontime', null, 'required', null, 'client');
+        $mform->setDefault('reflectiontime', 10);
+        $mform->addHelpButton('reflectiontime', 'reflectionandpreviewtime', 'qtype_recordrtc');
         $mform->disabledIf('reflectiontime', 'enablereflection', 'notchecked');
-        //////////added/////////////
-        // Settings for self-assessment - but only if the behaviour is installed.
-        if (is_readable($CFG->dirroot . '/question/behaviour/selfassess/behaviour.php')) {
-            $mform->addElement('header', 'selfassessmentheading', get_string('selfassessmentheading', 'qtype_recordrtc'));
-
-            $mform->addElement('selectyesno', 'canselfrate', get_string('canselfrate', 'qtype_recordrtc'), '');
-            $mform->addHelpButton('canselfrate', 'canselfrate', 'qtype_recordrtc');
-            $mform->setDefault('canselfrate', $this->get_default_value('canselfrate', 0));
-
-            $mform->addElement('selectyesno', 'canselfcomment', get_string('canselfcomment', 'qtype_recordrtc'), '');
-            $mform->addHelpButton('canselfcomment', 'canselfcomment', 'qtype_recordrtc');
-            $mform->setDefault('canselfcomment', $this->get_default_value('canselfcomment', 0));
-        } else {
-            $mform->addElement('hidden', 'canselfrate', 0);
-            $mform->setType('canselfrate', PARAM_BOOL);
-
-            $mform->addElement('hidden', 'canselfcomment', 0);
-            $mform->setType('canselfcomment', PARAM_BOOL);
-        }
-
-        // Fields for widget feedback.
-        if ($currentmediatype === qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV) {
-            $this->add_per_input_feedback_fields();
-        }
     }
 
-    /**
-     * Construct the part of the form with the per-input feedback fields.
-     *
-     * This method should only be called if the media type is currently MEDIA_TYPE_CUSTOM_AV.
-     */
-    public function add_per_input_feedback_fields(): void {
-        $qtype = new qtype_recordrtc();
-        $mform = $this->_form;
-
-        // Work out what widgets we have.
-        $widgets = $qtype->get_widget_placeholders($this->get_current_question_text());
-        if (!$widgets) {
-            // No widgets. Nothing to do.
-            return;
-        }
-
-        // Add them to the form.
-        $mform->addElement('header', 'feedbackheader', get_string('feedbackheader', 'qtype_recordrtc'));
-
-        foreach ($widgets as $widget) {
-            $mform->addElement('editor', $this->feedback_field_name($widget->name),
-                    get_string('feedbackfor', 'qtype_recordrtc', $widget->name),
-                    ['rows' => 3], $this->editoroptions);
-            $mform->setType($widget->name, PARAM_RAW);
-        }
-    }
-
-    /**
-     * Get the field name for the feedback field for a widget.
-     *
-     * @param string $widgetname widget name.
-     * @return string corresponding feedback field name.
-     */
-    protected function feedback_field_name(string $widgetname): string {
-        return 'feedbackfor' . $widgetname;
-    }
-
-    public function data_preprocessing($question): stdClass {
+    protected function data_preprocessing($question) {
         $question = parent::data_preprocessing($question);
-        $question = $this->data_preprocessing_per_input_feedbacks($question);
-        return $question;
-    }
 
-    /**
-     * Perform the necessary preprocessing for the fields added by
-     * {@see add_per_input_feedback_fields()}.
-     *
-     * @param stdClass $question the data beig passed to the form.
-     * @return stdClass updated $question
-     */
-    public function data_preprocessing_per_input_feedbacks(stdClass $question): stdClass {
-        if (empty($question->options->answers)) {
+        if (empty($question->options)) {
             return $question;
         }
 
-        $key = 0;
-        foreach ($question->options->answers as $answer) {
-            $widgetname = $answer->answer;
-            $fieldname = $this->feedback_field_name($widgetname);
-
-            // Prepare the feedback editor to display files in draft area.
-            $draftitemid = file_get_submitted_draft_itemid('feedback[' . $key . ']');
-            $question->{$fieldname}['text'] = file_prepare_draft_area(
-                    $draftitemid,          // Draftid.
-                    $this->context->id,    // Context.
-                    'question',            // Component.
-                    'answerfeedback',      // Filarea.
-                    !empty($answer->id) ? (int) $answer->id : null, // Itemid.
-                    $this->fileoptions,    // Options.
-                    $answer->feedback      // Text.
-            );
-            $question->{$fieldname}['itemid'] = $draftitemid;
-            $question->{$fieldname}['format'] = $answer->feedbackformat;
-        }
+        $question->mediatype = $question->options->mediatype;
+        $question->timelimitinseconds = $question->options->timelimitinseconds;
+        $question->allowpausing = $question->options->allowpausing;
+        $question->canselfrate = $question->options->canselfrate;
+        $question->canselfcomment = $question->options->canselfcomment;
+        $question->enablereflection = $question->options->enablereflection;
+        $question->reflectiontime = $question->options->reflectiontime;
 
         return $question;
     }
 
-    public function validation($fromform, $files): array {
-        $errors = parent::validation($fromform, $files);
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
 
-        // Validate placeholders in the question text.
-        [$placeholdererrors, $updatedqtext] = (new qtype_recordrtc())->validate_widget_placeholders(
-                $fromform['questiontext']['text'], $fromform['mediatype']);
-        if ($placeholdererrors) {
-            $errors['questiontext'] = $placeholdererrors;
-        }
-        if ($updatedqtext) {
-            /** @var MoodleQuickForm_editor $editor */
-            $editor = $this->_form->getElement('questiontext');
-            $editor->setValue(['text' => $updatedqtext]);
+        if ($data['mediatype'] === 'customav') {
+            $widgetcount = substr_count($data['questiontext']['text'], ':audio') +
+                    substr_count($data['questiontext']['text'], ':video') +
+                    substr_count($data['questiontext']['text'], ':screen');
+            if ($widgetcount < 2) {
+                $errors['questiontext'] = get_string('notenoughwidgetplaceholders', 'qtype_recordrtc');
+            }
         }
 
-        // If the Update form button was clicked, and there are no errors
-        // in the question text, then ensure the form does not submit
-        // by displaying a message.
-        if (!empty($fromform['updateform']) && !$placeholdererrors) {
-            $errors['updateform'] = get_string('updateformdone', 'qtype_recordrtc');
+        $maxtimelimit = (int) get_config('qtype_recordrtc', $data['mediatype'] . 'timelimit');
+        if ($data['timelimitinseconds'] > $maxtimelimit) {
+            $errors['timelimitinseconds'] = get_string('timelimittoohigh', 'qtype_recordrtc', $maxtimelimit);
+        } else if ($data['timelimitinseconds'] <= 0) {
+            $errors['timelimitinseconds'] = get_string('errorintimelimit', 'qtype_recordrtc');
         }
 
-        // Validate the time limit.
-        switch ($fromform['mediatype']) {
-            case qtype_recordrtc::MEDIA_TYPE_AUDIO :
-                $maxtimelimit = get_config('qtype_recordrtc', 'audiotimelimit');
-                break;
+        if ($data['reflectiontime'] <= 0) {
+            $errors['reflectiontime'] = get_string('errorinreflectiontime', 'qtype_recordrtc');
+        }
 
-            case qtype_recordrtc::MEDIA_TYPE_VIDEO :
-            case qtype_recordrtc::MEDIA_TYPE_CUSTOM_AV :
-                // We are using the 'Max video recording duration' for customav media type,
-                // because it is shorter than 'Max audio recording duration' and we need to
-                // use the value of $data['timelimitinseconds'] as default for widgets in
-                // question text when the bespoke duration is not specified by the widget itself.
-                $maxtimelimit = get_config('qtype_recordrtc', 'videotimelimit');
-                break;
-
-            case qtype_recordrtc::MEDIA_TYPE_SCREEN :
-                $maxtimelimit = get_config('qtype_recordrtc', 'screentimelimit');
-                break;
-            default: // Should not get here.
-                $maxtimelimit = qtype_recordrtc::DEFAULT_TIMELIMIT;
-                break;
-        }
-        if ($fromform['timelimitinseconds'] > $maxtimelimit) {
-            $errors['timelimitinseconds'] = get_string('err_timelimit', 'qtype_recordrtc', format_time($maxtimelimit));
-        }
-        if ($fromform['timelimitinseconds'] <= 0) {
-            $errors['timelimitinseconds'] = get_string('err_timelimitpositive', 'qtype_recordrtc');
-        }
         return $errors;
     }
 
-    public function qtype(): string {
+    public function qtype() {
         return 'recordrtc';
     }
 }

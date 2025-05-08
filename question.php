@@ -15,171 +15,190 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * A record audio and video question that is being attempted.
+ * Question type class for the RecordRTC question type.
  *
  * @package   qtype_recordrtc
- * @copyright 2019 The Open University
+ * @copyright 2022 The Open University
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+use qtype_recordrtc\widget_info;
+
+defined('MOODLE_INTERNAL') || die();
+
+require_once($CFG->dirroot . '/question/type/questionbase.php');
+
+/**
+ * Represents a RecordRTC question.
+ *
+ * @copyright 2022 The Open University
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_recordrtc_question extends question_with_responses {
-    use \qbehaviour_selfassess\question_with_self_assessment;
+    use question_with_self_assessment;
 
-    /**
-     * @var qtype_recordrtc\widget_info[] the widgets that appear in this question, indexed by the widget name.
-     */
-    public $widgets;
+    /** @var string Either audio, video or customav. */
+    public $mediatype;
 
-    /**
-     * @var bool whether the user can pause in the middle of recording.
-     */
+    /** @var int Recording time limit, in seconds. */
+    public $timelimitinseconds;
+
+    /** @var bool Whether the student can pause the recording part-way through. */
     public $allowpausing;
 
+    /** @var bool Whether the student can rate their response. */
+    public $canselfrate;
+
+    /** @var bool Whether the student can comment on their response. */
+    public $canselfcomment;
+
+    /** @var bool Whether reflection is enabled. */
+    public $enablereflection;
+
+    /** @var int Reflection and preview time in seconds. */
+    public $reflectiontime;
+
+    /** @var widget_info[] List of the widgets in the question text. */
+    public $widgets;
+
     public function make_behaviour(question_attempt $qa, $preferredbehaviour) {
-        global $CFG;
-        if (is_readable($CFG->dirroot . '/question/behaviour/selfassess/behaviour.php') &&
-                question_engine::get_behaviour_type($preferredbehaviour)->can_questions_finish_during_the_attempt()) {
+        if ($preferredbehaviour === 'selfassess' && ($this->canselfrate || $this->canselfcomment)) {
             return question_engine::make_behaviour('selfassess', $qa, $preferredbehaviour);
-        } else {
-            return question_engine::make_behaviour('manualgraded', $qa, $preferredbehaviour);
         }
+        return parent::make_behaviour($qa, $preferredbehaviour);
     }
 
-    public function get_expected_data(): array {
-        return ['recording' => question_attempt::PARAM_FILES];
-    }
-
-    /**
-     * Get the upload file size limit that applies here.
-     *
-     * @param context $context the context we are in.
-     * @return int max size in bytes.
-     */
-    public function get_upload_size_limit(context $context): int {
-        global $CFG;
-
-        // This logic is roughly copied from lib/form/filemanager.php.
-
-        // Get the course file size limit.
-        $coursebytes = 0;
-        [$context, $course] = get_context_info_array($context->id);
-        if (is_object($course)) {
-            $coursebytes = $course->maxbytes;
-        }
-
-        // TODO should probably also get the activity file size limit, but filemanager doesn't.
-
-        return get_user_max_upload_file_size($context, $CFG->maxbytes, $coursebytes);
-    }
-
-    public function summarise_response(array $response) {
-        if (!isset($response['recording']) || $response['recording'] === '') {
-            return get_string('norecording', 'qtype_recordrtc');
-        }
-        $files = $response['recording']->get_files();
-        $savedfiles = [];
+    public function get_expected_data() {
+        $expected = [];
         foreach ($this->widgets as $widget) {
-            $filename = qtype_recordrtc::get_media_filename($widget->name, $widget->type);
-            $file = $this->get_file_from_response($filename, $files);
-            if ($file) {
-                $savedfiles[] = s($file->get_filename());
+            $expected[$widget->name] = PARAM_FILE;
+        }
+        if ($this->canselfrate) {
+            $expected['selfrating'] = PARAM_INT;
+        }
+        if ($this->canselfcomment) {
+            $expected['selfcomment'] = PARAM_CLEANHTML;
+        }
+        return $expected;
+    }
+
+    public function start_attempt(question_attempt_step $step, $variant) {
+        foreach ($this->widgets as $widget) {
+            $step->set_qt_var('_' . $widget->name, 0); // Track attempt state (0 = no attempt yet).
+        }
+    }
+
+    public function is_complete_response(array $response) {
+        foreach ($this->widgets as $widget) {
+            if ($this->get_file_from_response($response, $widget->name)) {
+                return true; // A file exists, response is complete.
             }
         }
-        if (!$savedfiles) {
-            return get_string('norecording', 'qtype_recordrtc');
-        }
-        return implode(', ', $savedfiles);
+        return false;
     }
 
-    public function is_complete_response(array $response): bool {
-        // Have all parts of the question been answered?
-        if (!isset($response['recording']) || $response['recording'] === '') {
-            return false;
-        }
+    public function is_gradable_response(array $response) {
+        return $this->is_complete_response($response);
+    }
 
-        $files = $response['recording']->get_files();
+    public function get_validation_error(array $response) {
+        if ($this->is_complete_response($response)) {
+            return '';
+        }
+        return get_string('pleasecompleteallrecordings', 'qtype_recordrtc');
+    }
+
+    public function is_same_response(array $prevresponse, array $newresponse) {
         foreach ($this->widgets as $widget) {
-            $filename = qtype_recordrtc::get_media_filename($widget->name, $widget->type);
-            if (!$this->get_file_from_response($filename, $files)) {
+            $prevfile = $this->get_file_from_response($prevresponse, $widget->name);
+            $newfile = $this->get_file_from_response($newresponse, $widget->name);
+            if ($prevfile && $newfile) {
+                return $prevfile->get_contenthash() === $newfile->get_contenthash();
+            }
+            if ($prevfile || $newfile) {
                 return false;
             }
         }
         return true;
     }
 
-    public function is_gradable_response(array $response): bool {
-        // Has any parts of the question been answered? If so we might give partial credit.
-        if (!isset($response['recording']) || $response['recording'] === '') {
-            return false;
+    public function summarise_response(array $response) {
+        $summary = [];
+        foreach ($this->widgets as $widget) {
+            if ($file = $this->get_file_from_response($response, $widget->name)) {
+                $summary[] = $widget->name . ': ' . $file->get_filename();
+            }
         }
+        return implode('; ', $summary);
+    }
 
-        $files = $response['recording']->get_files();
-        return !empty($files);
+    public function get_correct_response() {
+        return [];
+    }
+
+    public function check_file_access($qa, $options, $component, $filearea, $args, $forcedownload) {
+        if ($component == 'question' && $filearea == 'response_recording') {
+            $questionid = reset($args);
+            if ($questionid != $this->id) {
+                return false;
+            }
+            $filename = end($args);
+            foreach ($this->widgets as $widget) {
+                if ($filename === qtype_recordrtc::get_media_filename($widget->name, $this->mediatype)) {
+                    return true;
+                }
+            }
+        }
+        return parent::check_file_access($qa, $options, $component, $filearea, $args, $forcedownload);
     }
 
     /**
-     * Get a specific file from the array of files in a resonse (or null).
+     * Get the file uploaded in the response for a particular widget, if any.
      *
-     * To support questions answered with recording format OGG to MP3, before we switched back again,
-     * if you are looking for file.ogg, and file.mp3 is found, then that is returned,
-     * and $filename (passed by reference) is updated.
-     *
-     * @param string $filename the file we want.
-     * @param stored_file[] $files all the files from a response (e.g. $response['recording']->get_files();)
-     * @return stored_file|null the file, if it exists, or null if not.
+     * @param array $response The submitted response.
+     * @param string $widgetname The name of the widget.
+     * @return stored_file|null The file, if one was uploaded.
      */
-    public function get_file_from_response(string &$filename, array $files): ?stored_file {
-        $legacyfilename = null;
-        if (substr($filename, -4) === '.ogg') {
-            $legacyfilename = substr($filename, 0, -4) . '.mp3';
+    public function get_file_from_response(array $response, string $widgetname): ?stored_file {
+        if (empty($response[$widgetname])) {
+            return null;
         }
+        $filename = qtype_recordrtc::get_media_filename($widgetname, $this->mediatype);
+        $fs = get_file_storage();
+        $files = $fs->get_area_files(
+            $this->context->id,
+            'question',
+            'response_recording',
+            $this->id,
+            'filename',
+            false
+        );
         foreach ($files as $file) {
             if ($file->get_filename() === $filename) {
                 return $file;
-            } else if ($file->get_filename() === $legacyfilename) {
-                $filename = $legacyfilename;
-                return $file;
             }
         }
-
         return null;
     }
 
-    public function get_validation_error(array $response): string {
-        if ($this->is_complete_response($response)) {
-            return '';
-        }
-        return get_string('pleaserecordsomethingineachpart', 'qtype_recordrtc');
+    /**
+     * Get the maximum upload size allowed for recordings in this question.
+     *
+     * @return int The maximum size in bytes.
+     */
+    public function get_upload_size_limit(): int {
+        return min(
+            (int) get_config('qtype_recordrtc', 'maxuploadsize'),
+            (int) $CFG->maxbytes
+        );
     }
 
-    public function is_same_response(array $prevresponse, array $newresponse): bool {
-        return question_utils::arrays_same_at_key_missing_is_blank(
-                $prevresponse, $newresponse, 'recording');
-    }
-
-    public function get_correct_response(): ?array {
-        // Not possible to give a correct response.
-        return null;
-    }
-
-    public function check_file_access($qa, $options, $component, $filearea,
-            $args, $forcedownload): bool {
-        if ($component == 'question' && $filearea == 'response_recording') {
-            // Response recording always accessible.
-            return true;
-        }
-
-        if ($component == 'question' && $filearea == 'answerfeedback') {
-            $answerid = reset($args);
-            foreach ($this->widgets as $widget) {
-                if ($answerid == $widget->answerid) {
-                    // See comment in the renderer about why we check both.
-                    return $options->feedback || $options->generalfeedback;
-                }
+    public function apply_attempt_state(question_attempt_step $step) {
+        foreach ($this->widgets as $widget) {
+            $attemptstate = $step->get_qt_var('_' . $widget->name);
+            if ($attemptstate === null) {
+                $step->set_qt_var('_' . $widget->name, 0);
             }
-            return false; // Not one of ours.
         }
-
-        return parent::check_file_access($qa, $options, $component, $filearea,
-                $args, $forcedownload);
     }
 }

@@ -27,6 +27,8 @@
     * aspectratio: (only for video) '4x3' or '16x9'.
     * width: (only for video) width of the video in pixels.
     * candownload: whether the current user should see options to download the recordings.
+    * enablereflection: whether reflection is enabled.
+    * reflectiontime: reflection and preview time in seconds.
 
     Example context (json):
     {
@@ -38,43 +40,30 @@
         "recordingurl": "http://example.com/moodle/draftfile.php?...",
         "aspectratio": "16x9",
         "width": 640,
-        "candownload": true
+        "candownload": true,
+        "enablereflection": false,
+        "reflectiontime": 10
     }
 }}
 <span class="qtype_recordrtc-video-widget qtype_recordrtc-ratio-{{aspectratio}} d-flex flex-column mw-100"
       style="width: {{width}}px" data-media-type="video" data-widget-name="{{widgetname}}"
-      data-state="{{^hasrecording}}new{{/hasrecording}}{{#hasrecording}}recorded{{/hasrecording}}"
+      data-state="preview"
       data-max-recording-duration="{{maxrecordingduration}}"
+      data-preview-time="{{reflectiontime}}"
       data-recording-filename="{{filename}}"
       data-enablereflection="{{enablereflection}}"
       data-reflectiontime="{{reflectiontime}}">
 
-    {{#enablereflection}}
-        <button id="show-question-button-{{widgetname}}" class="btn btn-primary" disabled>
-            {{#str}}showquestion, qtype_recordrtc{{/str}}
-        </button>
-        <div id="reflection-timer-{{widgetname}}" class="reflection-timer" style="display: none;">
-            {{#str}}reflectiontime_remaining, qtype_recordrtc,{{reflectiontime}}{{/str}}
-        </div>
-    {{/enablereflection}}
-
-    <span class="qtype_recordrtc-no-recording-placeholder mb-1 text-center{{#hasrecording}} hide{{/hasrecording}}">
+    <span class="qtype_recordrtc-preview-placeholder flex-grow-1 text-center">
+        {{#str}}previewingquestion, qtype_recordrtc, {{reflectiontime}}{{/str}}
+    </span>
+    <span class="qtype_recordrtc-no-recording-placeholder mb-1 text-center hide">
         {{#str}}norecording, qtype_recordrtc{{/str}}
     </span>
-    <span class="qtype_recordrtc-media-player flex-grow-1{{^hasrecording}} hide{{/hasrecording}}">
+    <span class="qtype_recordrtc-media-player flex-grow-1 hide">
         <video controls class="w-100"{{^candownload}} oncontextmenu="return false;" controlsList="nodownload"{{/candownload}}>
             <source src="{{recordingurl}}">
         </video>
-    </span>
-    <span>
-        <button type="button" class="qtype_recordrtc-main-button btn btn-secondary osep-smallbutton m-0 w-100">
-            {{^hasrecording}}
-                {{#str}}startcamerax, qtype_recordrtc, <span class="sr-only">&nbsp;{{widgetname}}</span>{{/str}}
-            {{/hasrecording}}
-            {{#hasrecording}}
-                {{#str}}recordagainx, qtype_recordrtc, <span class="sr-only">&nbsp;{{widgetname}}</span>{{/str}}
-            {{/hasrecording}}
-        </button>
     </span>
     <span class="qtype_recordrtc-control-row w-100 hide">
         <span class="qtype_recordrtc-time-left flex-grow-1 text-center position-relative">
@@ -87,8 +76,18 @@
                 </button>
             </span>
         {{/allowpausing}}
-        <button type="button" class="qtype_recordrtc-stop-button btn btn-secondary osep-smallbutton ml-1 mr-0">
-            {{#str}}stoprecording, qtype_recordrtc{{/str}}
-        </button>
+        <span class="qtype_recordrtc-finish-button hide">
+            <button type="button" class="btn btn-primary osep-smallbutton ml-1 mr-0">
+                {{#str}}finishrecording, qtype_recordrtc{{/str}}
+            </button>
+        </span>
     </span>
+    {{#enablereflection}}
+        <button id="show-question-button-{{widgetname}}" class="btn btn-primary hide" disabled>
+            {{#str}}showquestion, qtype_recordrtc{{/str}}
+        </button>
+        <div id="reflection-timer-{{widgetname}}" class="reflection-timer hide">
+            {{#str}}reflectiontime_remaining, qtype_recordrtc, {{reflectiontime}}{{/str}}
+        </div>
+    {{/enablereflection}}
 </span>
